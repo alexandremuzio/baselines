@@ -10,6 +10,8 @@ from baselines.common.mpi_moments import mpi_moments
 from mpi4py import MPI
 from collections import deque
 
+from baselines.ppo1.symmetry import apply_symmetry_observation, apply_symmetry_action
+
 def traj_segment_generator(pi, env, horizon, stochastic, rw_scaler):
     t = 0
     ac = env.action_space.sample() # not used, just so we have the datatype
@@ -101,7 +103,7 @@ def learn(env, policy_fn, *,
         save_model=True, # whether to save the model,
         load_model=True,
         model_dir=None,
-        rw_scaler=None, filename):
+        rw_scaler=None, filename,sym):
     rank = MPI.COMM_WORLD.Get_rank()
 
     # Setup losses and stuff
@@ -203,6 +205,28 @@ def learn(env, policy_fn, *,
         ob, ac, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
+
+
+
+        if sym == "sym":
+            print('**************************************************************************')
+            print("ob", ob.shape)
+            print("ac", ac.shape)
+            print("adv", atarg.shape)
+            print("tdlamret", tdlamret.shape)
+            print("vpred", vpredbefore.shape)
+            ob = apply_symmetry_observation(ob)
+            ac = apply_symmetry_action(ac)
+            atarg = np.concatenate((atarg, atarg))
+            tdlamret = np.concatenate((tdlamret, tdlamret))
+            vpredbefore = np.concatenate((vpredbefore, vpredbefore))
+            print("\nob", ob.shape)
+            print("ac", ac.shape)
+            print("adv", atarg.shape)
+            print("tdlamret", tdlamret.shape)
+            print("vpred", vpredbefore.shape)
+            print('**************************************************************************\n\n')
+
         d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
         optim_batchsize = optim_batchsize or ob.shape[0]
 
